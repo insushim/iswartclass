@@ -72,17 +72,17 @@ export default function RegisterPage() {
 
       const result = await registerUser(formData);
 
-      if (!result.success && result.error) {
-        if (typeof result.error === 'object') {
+      if (!result.success) {
+        const errorResult = result as { success: false; error: Record<string, string[]> | string };
+        if (typeof errorResult.error === 'object') {
           // Handle field-specific errors
-          const fieldErrors = result.error as Record<string, string[]>;
-          Object.entries(fieldErrors).forEach(([field, messages]) => {
+          Object.entries(errorResult.error).forEach(([field, messages]) => {
             if (field === 'name' || field === 'email' || field === 'password') {
               setError(field, { message: messages[0] });
             }
           });
         } else {
-          toast.error(String(result.error));
+          toast.error(errorResult.error);
         }
         return;
       }
