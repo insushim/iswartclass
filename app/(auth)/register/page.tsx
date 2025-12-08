@@ -72,8 +72,8 @@ export default function RegisterPage() {
 
       const result = await registerUser(formData);
 
-      if (!result.success) {
-        if (typeof result.error === 'object' && result.error !== null) {
+      if (!result.success && result.error) {
+        if (typeof result.error === 'object') {
           // Handle field-specific errors
           const fieldErrors = result.error as Record<string, string[]>;
           Object.entries(fieldErrors).forEach(([field, messages]) => {
@@ -81,8 +81,8 @@ export default function RegisterPage() {
               setError(field, { message: messages[0] });
             }
           });
-        } else if (typeof result.error === 'string') {
-          toast.error(result.error);
+        } else {
+          toast.error(String(result.error));
         }
         return;
       }
