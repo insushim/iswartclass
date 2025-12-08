@@ -89,12 +89,9 @@ export async function POST(request: NextRequest) {
       theme,
       subTheme,
       ageGroup,
-      prompt,
-      complexity,
-      quantity,
-      paperSize,
-      orientation,
-      userId: session.user.id,
+      difficulty: Math.ceil(complexity / 20), // Convert 0-100 to 1-5
+      additionalDetails: prompt,
+      count: quantity,
     });
 
     // Deduct credits
@@ -107,11 +104,11 @@ export async function POST(request: NextRequest) {
 
     // Save sheets to database
     const savedSheets = await Promise.all(
-      generatedSheets.map((sheet) =>
+      generatedSheets.map((sheet, index) =>
         prisma.sheet.create({
           data: {
             userId: session.user.id,
-            title: sheet.title,
+            title: `${THEMES[theme as keyof typeof THEMES]?.nameKo || theme} - ${subTheme || ''} #${index + 1}`.trim(),
             technique,
             theme,
             subTheme,
