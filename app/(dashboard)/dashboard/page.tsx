@@ -19,12 +19,19 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-const stats = [
+const stats: Array<{
+  title: string;
+  value: string;
+  change: string;
+  changeType: 'positive' | 'negative' | 'neutral';
+  icon: typeof Wand2;
+  href: string;
+}> = [
   {
     title: '생성된 도안',
     value: '124',
     change: '+12%',
-    changeType: 'positive' as const,
+    changeType: 'positive',
     icon: Wand2,
     href: '/library',
   },
@@ -32,7 +39,7 @@ const stats = [
     title: '내 라이브러리',
     value: '89',
     change: '+5%',
-    changeType: 'positive' as const,
+    changeType: 'positive',
     icon: Library,
     href: '/library',
   },
@@ -40,7 +47,7 @@ const stats = [
     title: '등록 학생',
     value: '32',
     change: '+3',
-    changeType: 'positive' as const,
+    changeType: 'positive',
     icon: Users,
     href: '/classroom/students',
   },
@@ -48,7 +55,7 @@ const stats = [
     title: '이번 달 사용량',
     value: '67%',
     change: '20/30',
-    changeType: 'neutral' as const,
+    changeType: 'neutral',
     icon: TrendingUp,
     href: '/settings/subscription',
   },
