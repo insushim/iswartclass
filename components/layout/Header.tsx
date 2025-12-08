@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import {
   Bell,
   Search,
@@ -33,7 +33,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 
 interface HeaderProps {
@@ -48,7 +47,6 @@ interface HeaderProps {
 }
 
 export function Header({ user, credits = 30, onMenuClick }: HeaderProps) {
-  const router = useRouter();
   const [isDark, setIsDark] = useState(false);
   const [notifications] = useState([
     { id: 1, title: '새로운 도안이 생성되었습니다', time: '5분 전', read: false },
@@ -60,11 +58,8 @@ export function Header({ user, credits = 30, onMenuClick }: HeaderProps) {
 
   const handleLogout = async () => {
     try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
+      await signOut({ callbackUrl: '/login' });
       toast.success('로그아웃되었습니다');
-      router.push('/login');
-      router.refresh();
     } catch (error) {
       toast.error('로그아웃에 실패했습니다');
       console.error('Logout error:', error);

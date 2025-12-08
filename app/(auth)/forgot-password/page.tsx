@@ -10,7 +10,6 @@ import { Mail, Loader2, ArrowLeft, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { createClient } from '@/lib/supabase/client';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('올바른 이메일을 입력해주세요'),
@@ -38,14 +37,15 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
 
     try {
-      const supabase = createClient();
-
-      const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-        redirectTo: `${window.location.origin}/api/auth/callback?next=/reset-password`,
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: data.email }),
       });
 
-      if (error) {
-        toast.error(error.message);
+      if (!response.ok) {
+        const result = await response.json();
+        toast.error(result.error || '이메일 발송에 실패했습니다');
         return;
       }
 
