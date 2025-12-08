@@ -227,10 +227,7 @@ export default function GeneratePage() {
                     <SelectContent>
                       {selectedTheme.subThemes.map((sub) => (
                         <SelectItem key={sub.id} value={sub.id}>
-                          <span className="flex items-center gap-2">
-                            <span>{sub.icon}</span>
-                            {sub.name}
-                          </span>
+                          {sub.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
