@@ -1,0 +1,1100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============ NextAuth 관련 ============
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============ 사용자 관련 ============
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  password      String?   // 이메일/비밀번호 로그인용
+  role          Role      @default(TEACHER)
+  locale        String    @default("ko")
+  timezone      String    @default("Asia/Seoul")
+
+  // NextAuth 관계
+  accounts Account[]
+  sessions Session[]
+
+  // 앱 관계
+  subscription     Subscription?
+  sheets           Sheet[]
+  folders          Folder[]
+  favorites        Favorite[]
+  curriculums      Curriculum[]
+  classes          Class[]
+  students         Student[]
+  portfolios       Portfolio[]
+  marketplaceItems MarketplaceItem[]
+  purchases        Purchase[]
+  posts            Post[]
+  comments         Comment[]
+  notifications    Notification[]
+  achievements     UserAchievement[]
+  activityLogs     ActivityLog[]
+
+  // 설정
+  settings     Json?    @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastActiveAt DateTime @default(now())
+
+  @@index([email])
+  @@index([role])
+}
+
+enum Role {
+  TEACHER
+  PARENT
+  ADMIN
+  PREMIUM
+}
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  plan   Plan               @default(FREE)
+  status SubscriptionStatus @default(ACTIVE)
+
+  // 크레딧 시스템
+  credits        Int @default(30)
+  monthlyCredits Int @default(30)
+  bonusCredits   Int @default(0)
+  usedCredits    Int @default(0)
+
+  // 기간
+  currentPeriodStart DateTime  @default(now())
+  currentPeriodEnd   DateTime?
+  canceledAt         DateTime?
+
+  // 결제 정보
+  paymentProvider String?
+  customerId      String?
+  subscriptionId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([plan])
+  @@index([status])
+}
+
+enum Plan {
+  FREE
+  BASIC
+  PREMIUM
+  UNLIMITED
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  PAUSED
+}
+
+// ============ 도안 관련 ============
+
+model Sheet {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 기본 정보
+  title       String
+  description String?
+
+  // 이미지
+  imageUrl     String
+  thumbnailUrl String?
+  originalUrl  String?
+
+  // 분류
+  ageGroup   AgeGroup
+  technique  Technique
+  theme      String
+  subTheme   String?
+  difficulty Int       @default(3)
+  style      String?
+
+  // 메타데이터
+  promptUsed       String @db.Text
+  generationParams Json?
+  metadata         Json?
+
+  // 옵션
+  hasWatermark Boolean @default(false)
+  isPreset     Boolean @default(false)
+  isPublic     Boolean @default(false)
+  isPremium    Boolean @default(false)
+
+  // 통계
+  views       Int    @default(0)
+  downloads   Int    @default(0)
+  prints      Int    @default(0)
+  rating      Float?
+  ratingCount Int    @default(0)
+
+  // 태그
+  tags String[]
+
+  // 관계
+  favorites       Favorite[]
+  curriculumItems CurriculumItem[]
+  portfolioItems  PortfolioItem[]
+  comments        Comment[]
+  folders         SheetFolder[]
+  assignments     Assignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([technique])
+  @@index([ageGroup])
+  @@index([theme])
+  @@index([isPreset])
+  @@index([isPublic])
+  @@index([createdAt])
+}
+
+model SheetFolder {
+  id       String @id @default(cuid())
+  userId   String
+  sheetId  String
+  sheet    Sheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  folderId String
+  folder   Folder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([sheetId, folderId])
+}
+
+model Folder {
+  id       String        @id @default(cuid())
+  userId   String
+  name     String
+  color    String?
+  icon     String?
+  parentId String?
+  parent   Folder?       @relation("FolderTree", fields: [parentId], references: [id])
+  children Folder[]      @relation("FolderTree")
+  sheets   SheetFolder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([parentId])
+}
+
+model Favorite {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sheetId String
+  sheet   Sheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, sheetId])
+  @@index([userId])
+}
+
+enum AgeGroup {
+  TODDLER
+  LOWER_ELEM
+  UPPER_ELEM
+  ALL
+}
+
+enum Technique {
+  COLORING
+  LINE_DRAWING
+  DOT_CONNECT
+  SYMMETRY
+  MIRROR
+  PROPORTION
+  GRID_COPY
+  ORIGAMI
+  PAPER_CRAFT
+  CUTTING
+  POPUP
+  MOBILE
+  COLLAGE
+  STENCIL
+  STAMP
+  RUBBING
+  MARBLING
+  MOSAIC
+  MANDALA
+  ZENTANGLE
+  DOODLE
+  PATTERN
+  BORDER
+  PERSPECTIVE
+  SHADING
+  TEXTURE
+  GESTURE
+  CONTOUR
+  NEGATIVE_SPACE
+  MIXED_MEDIA
+  COLLABORATIVE
+  BOOK_MAKING
+  MASK
+  PUPPET
+  FRAME
+}
+
+// ============ 커리큘럼 관련 ============
+
+model Curriculum {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  ageGroup    AgeGroup
+
+  // 기간
+  weeks     Int       @default(4)
+  startDate DateTime?
+  endDate   DateTime?
+
+  // 상태
+  status     CurriculumStatus @default(DRAFT)
+  isTemplate Boolean          @default(false)
+  isPublic   Boolean          @default(false)
+
+  // 내용
+  items     CurriculumItem[]
+  goals     String[]
+  materials String[]
+
+  // 통계
+  usageCount Int    @default(0)
+  rating     Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isTemplate])
+  @@index([isPublic])
+}
+
+enum CurriculumStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model CurriculumItem {
+  id           String     @id @default(cuid())
+  curriculumId String
+  curriculum   Curriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+
+  sheetId String?
+  sheet   Sheet?  @relation(fields: [sheetId], references: [id])
+
+  week       Int
+  day        Int
+  order      Int
+  technique  Technique
+  theme      String?
+  subTheme   String?
+  difficulty Int       @default(3)
+
+  title      String?
+  note       String?
+  duration   Int?
+  materials  String[]
+  objectives String[]
+
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([curriculumId])
+  @@index([week, day])
+}
+
+// ============ 학급 관리 ============
+
+model Class {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  ageGroup    AgeGroup
+  grade       String?
+
+  // 설정
+  color       String?
+  icon        String?
+  maxStudents Int     @default(30)
+
+  // 접근 코드
+  inviteCode String @unique @default(cuid())
+
+  // 상태
+  isActive Boolean @default(true)
+
+  // 관계
+  students    Student[]
+  assignments Assignment[]
+  attendance  Attendance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([inviteCode])
+}
+
+model Student {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  classId String?
+  class   Class?  @relation(fields: [classId], references: [id])
+
+  // 기본 정보
+  name      String
+  nickname  String?
+  avatarUrl String?
+  ageGroup  AgeGroup
+  birthDate DateTime?
+
+  // 학부모 연결
+  parentEmail  String?
+  parentPhone  String?
+  parentLinked Boolean @default(false)
+  parentUserId String?
+
+  // 진행 상황
+  progress    Json?
+  skillLevels Json?
+  interests   String[]
+  notes       String? @db.Text
+
+  // 통계
+  totalActivities Int       @default(0)
+  streakDays      Int       @default(0)
+  lastActivityAt  DateTime?
+
+  // 관계
+  portfolios   Portfolio[]
+  attendance   Attendance[]
+  assignments  StudentAssignment[]
+  achievements StudentAchievement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([classId])
+  @@index([parentEmail])
+}
+
+model Attendance {
+  id        String  @id @default(cuid())
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  date   DateTime         @db.Date
+  status AttendanceStatus @default(PRESENT)
+  note   String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, date])
+  @@index([classId, date])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model Assignment {
+  id      String @id @default(cuid())
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  sheetId String?
+  sheet   Sheet?  @relation(fields: [sheetId], references: [id])
+
+  title        String
+  description  String?
+  instructions String? @db.Text
+  technique    Technique?
+  materials    String[]
+
+  dueDate   DateTime?
+  publishAt DateTime  @default(now())
+
+  isGraded  Boolean @default(false)
+  maxPoints Int?
+
+  students StudentAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([classId])
+  @@index([dueDate])
+}
+
+model StudentAssignment {
+  id           String     @id @default(cuid())
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  status      AssignmentStatus @default(PENDING)
+  submittedAt DateTime?
+
+  // 제출물
+  submissionUrl  String?
+  submissionNote String?
+
+  // 평가
+  grade    Int?
+  feedback String?   @db.Text
+  gradedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, assignmentId])
+}
+
+enum AssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+  LATE
+}
+
+// ============ 포트폴리오 ============
+
+model Portfolio {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+
+  // 공유 설정
+  isPublic  Boolean @default(false)
+  shareCode String? @unique
+  shareUrl  String?
+
+  items PortfolioItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([shareCode])
+}
+
+model PortfolioItem {
+  id          String    @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  sheetId String?
+  sheet   Sheet?  @relation(fields: [sheetId], references: [id])
+
+  // 완성 작품 이미지
+  artworkUrl   String
+  thumbnailUrl String?
+
+  title       String?
+  description String?
+  technique   Technique?
+
+  // 비교
+  beforeUrl String?
+
+  // 평가
+  rating   Int?
+  feedback String? @db.Text
+
+  // 태그
+  tags String[]
+
+  completedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([portfolioId])
+  @@index([completedAt])
+}
+
+// ============ 튜토리얼 ============
+
+model Tutorial {
+  id            String    @id @default(cuid())
+  technique     Technique
+  title         String
+  titleKo       String
+  description   String    @db.Text
+  descriptionKo String    @db.Text
+
+  // 난이도
+  difficulty Int        @default(3)
+  ageGroups  AgeGroup[]
+
+  // 콘텐츠
+  thumbnailUrl  String?
+  videoUrl      String?
+  videoDuration Int?
+
+  // 단계
+  steps TutorialStep[]
+
+  // 재료
+  materials String[]
+
+  // 팁
+  tips String[]
+
+  // 통계
+  views       Int    @default(0)
+  completions Int    @default(0)
+  rating      Float?
+
+  // 상태
+  isPublished Boolean @default(false)
+  isPremium   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([technique])
+  @@index([isPublished])
+}
+
+model TutorialStep {
+  id         String   @id @default(cuid())
+  tutorialId String
+  tutorial   Tutorial @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
+
+  order       Int
+  title       String
+  description String @db.Text
+
+  // 미디어
+  imageUrl   String?
+  videoUrl   String?
+  videoStart Int?
+  videoEnd   Int?
+
+  // TTS
+  voiceText String? @db.Text
+  voiceUrl  String?
+
+  // 인터랙티브
+  isInteractive   Boolean @default(false)
+  interactionData Json?
+
+  duration Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([tutorialId, order])
+}
+
+// ============ 마켓플레이스 ============
+
+model MarketplaceItem {
+  id       String @id @default(cuid())
+  sellerId String
+  seller   User   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  type        MarketplaceItemType
+  title       String
+  description String              @db.Text
+
+  // 미리보기
+  thumbnailUrl String
+  previewUrls  String[]
+
+  // 파일
+  fileUrl    String
+  fileSize   Int?
+  fileFormat String?
+
+  // 내용물
+  itemCount  Int         @default(1)
+  techniques Technique[]
+  ageGroups  AgeGroup[]
+  themes     String[]
+
+  // 가격
+  price         Int
+  originalPrice Int?
+
+  // 상태
+  status    MarketplaceStatus @default(PENDING)
+  isFeature Boolean           @default(false)
+
+  // 통계
+  views       Int    @default(0)
+  purchases   Int    @default(0)
+  rating      Float?
+  ratingCount Int    @default(0)
+
+  // 리뷰
+  reviews         Review[]
+  purchaseRecords Purchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sellerId])
+  @@index([type])
+  @@index([status])
+  @@index([price])
+}
+
+enum MarketplaceItemType {
+  SHEET_PACK
+  CURRICULUM
+  TUTORIAL
+  TEMPLATE
+  RESOURCE
+}
+
+enum MarketplaceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model Purchase {
+  id     String          @id @default(cuid())
+  userId String
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId String
+  item   MarketplaceItem @relation(fields: [itemId], references: [id])
+
+  price          Int
+  paymentMethod  String?
+  transactionId  String?
+  downloadCount  Int       @default(0)
+  lastDownloadAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, itemId])
+  @@index([userId])
+}
+
+model Review {
+  id     String          @id @default(cuid())
+  itemId String
+  item   MarketplaceItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  userId String
+
+  rating     Int
+  title      String?
+  content    String? @db.Text
+  isVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([itemId, userId])
+  @@index([itemId])
+}
+
+// ============ 커뮤니티 ============
+
+model Post {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   PostType
+
+  title   String
+  content String @db.Text
+
+  // 미디어
+  imageUrls String[]
+
+  // 관련 정보
+  technique Technique?
+  sheetId   String?
+
+  // 상태
+  isPublished Boolean @default(true)
+  isPinned    Boolean @default(false)
+
+  // 통계
+  views Int @default(0)
+  likes Int @default(0)
+
+  // 관계
+  comments Comment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum PostType {
+  SHOWCASE
+  TIP
+  QUESTION
+  DISCUSSION
+  CHALLENGE
+}
+
+model Comment {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId  String?
+  post    Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sheetId String?
+  sheet   Sheet?  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+
+  content String @db.Text
+  likes   Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId])
+  @@index([sheetId])
+  @@index([parentId])
+}
+
+// ============ 성취/배지 ============
+
+model Achievement {
+  id            String          @id @default(cuid())
+  code          String          @unique
+  name          String
+  nameKo        String
+  description   String
+  descriptionKo String
+  iconUrl       String
+  color         String?
+  type          AchievementType
+  category      String
+
+  // 조건
+  condition Json
+  points    Int @default(10)
+
+  // 레벨
+  level Int @default(1)
+
+  isActive Boolean @default(true)
+
+  userAchievements    UserAchievement[]
+  studentAchievements StudentAchievement[]
+
+  createdAt DateTime @default(now())
+}
+
+enum AchievementType {
+  MILESTONE
+  STREAK
+  SKILL
+  SPECIAL
+  SEASONAL
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  progress    Int       @default(0)
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, achievementId])
+}
+
+model StudentAchievement {
+  id            String      @id @default(cuid())
+  studentId     String
+  student       Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  progress    Int       @default(0)
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, achievementId])
+}
+
+// ============ 알림 ============
+
+model Notification {
+  id      String           @id @default(cuid())
+  userId  String
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type    NotificationType
+  title   String
+  message String
+
+  // 관련 링크
+  actionUrl   String?
+  actionLabel String?
+
+  // 메타데이터
+  metadata Json?
+
+  // 상태
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  // 이메일/푸시
+  emailSent Boolean @default(false)
+  pushSent  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  SYSTEM
+  ACHIEVEMENT
+  ASSIGNMENT
+  COMMENT
+  LIKE
+  FOLLOW
+  REMINDER
+  PARENT_UPLOAD
+  SUBSCRIPTION
+  MARKETPLACE
+}
+
+// ============ 활동 로그 ============
+
+model ActivityLog {
+  id     String       @id @default(cuid())
+  userId String
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   ActivityType
+  action String
+
+  // 대상
+  targetType String?
+  targetId   String?
+
+  // 메타데이터
+  metadata Json?
+
+  // 디바이스 정보
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum ActivityType {
+  GENERATE
+  DOWNLOAD
+  PRINT
+  VIEW
+  FAVORITE
+  SHARE
+  CURRICULUM
+  STUDENT
+  PORTFOLIO
+  PURCHASE
+  AUTH
+}
+
+// ============ 시스템 ============
+
+model Theme {
+  id       String @id @default(cuid())
+  code     String @unique
+  name     String
+  nameKo   String
+  category String
+
+  // 하위 주제들
+  subThemes SubTheme[]
+
+  // 메타
+  icon  String?
+  color String?
+
+  // 계절/명절
+  isSeasonal  Boolean   @default(false)
+  seasonStart DateTime?
+  seasonEnd   DateTime?
+
+  isActive Boolean @default(true)
+  order    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([isSeasonal])
+}
+
+model SubTheme {
+  id      String @id @default(cuid())
+  themeId String
+  theme   Theme  @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  name   String
+  nameKo String
+
+  // 사전 생성 도안
+  presetCount Int @default(0)
+
+  isActive Boolean @default(true)
+  order    Int     @default(0)
+
+  @@index([themeId])
+}
+
+model PresetSheet {
+  id         String    @id @default(cuid())
+  technique  Technique
+  theme      String
+  subTheme   String
+  ageGroup   AgeGroup
+  difficulty Int
+
+  imageUrl     String
+  thumbnailUrl String
+  promptUsed   String @db.Text
+
+  // 사용 통계
+  usageCount Int       @default(0)
+  lastUsedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([technique, theme, ageGroup])
+  @@index([usageCount])
+}
+
+model BGMTrack {
+  id       String  @id @default(cuid())
+  title    String
+  artist   String?
+  url      String
+  duration Int
+  category String
+  mood     String[]
+
+  isActive  Boolean @default(true)
+  isPremium Boolean @default(false)
+  order     Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([category])
+}
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+
+  updatedAt DateTime @updatedAt
+}
