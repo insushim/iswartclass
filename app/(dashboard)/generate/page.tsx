@@ -249,8 +249,7 @@ export default function GeneratePage() {
                       onClick={() => setAgeGroup(key)}
                       className="flex-col h-auto py-2"
                     >
-                      <span className="text-lg">{group.icon}</span>
-                      <span className="text-xs">{group.name}</span>
+                      <span className="text-xs font-medium">{group.nameKo}</span>
                       <span className="text-[10px] text-muted-foreground">
                         {group.ageRange}
                       </span>
