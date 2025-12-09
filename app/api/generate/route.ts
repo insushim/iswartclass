@@ -18,6 +18,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const userId = session.user.id;
+
     // Parse request body
     const body = await request.json();
     const {
@@ -107,20 +109,17 @@ export async function POST(request: NextRequest) {
       generatedSheets.map((sheet, index) =>
         prisma.sheet.create({
           data: {
-            userId: session.user.id,
+            userId,
             title: `${THEMES[theme as keyof typeof THEMES]?.nameKo || theme} - ${subTheme || ''} #${index + 1}`.trim(),
             technique,
             theme,
             subTheme,
             ageGroup,
-            prompt: sheet.prompt,
+            promptUsed: sheet.prompt || '',
             imageUrl: sheet.imageUrl,
             thumbnailUrl: sheet.thumbnailUrl,
-            complexity,
-            paperSize,
-            orientation,
-            includeInstructions,
-            includeWatermark,
+            difficulty: Math.ceil(complexity / 20),
+            hasWatermark: includeWatermark,
           },
         })
       )

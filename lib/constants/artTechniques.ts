@@ -706,6 +706,6 @@ export function getTechniquesByCategory(category: string): TechniqueId[] {
 // 연령대별 추천 기법 가져오기
 export function getTechniquesForAgeGroup(ageGroup: string): TechniqueId[] {
   return Object.entries(ART_TECHNIQUES)
-    .filter(([_, technique]) => technique.ageGroups.includes(ageGroup))
+    .filter(([_, technique]) => (technique.ageGroups as readonly string[]).includes(ageGroup))
     .map(([id]) => id as TechniqueId);
 }

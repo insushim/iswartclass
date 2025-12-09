@@ -149,7 +149,7 @@ Requirements:
 
 Available Techniques:
 ${Object.entries(ART_TECHNIQUES)
-  .filter(([_, t]) => t.ageGroups.includes(ageGroup))
+  .filter(([_, t]) => (t.ageGroups as readonly string[]).includes(ageGroup))
   .map(([id, t]) => `- ${t.nameKo} (${id})`)
   .join('\n')}
 

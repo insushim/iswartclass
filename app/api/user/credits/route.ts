@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
       BASIC: 150,
       PREMIUM: 500,
       UNLIMITED: Infinity,
+      ENTERPRISE: Infinity,
     }[plan] || 30;
 
     return NextResponse.json({

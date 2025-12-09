@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   BookOpen,
@@ -19,6 +19,7 @@ import {
   Clock,
   ChevronRight,
   GraduationCap,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,113 +46,118 @@ import { toast } from 'sonner';
 interface CurriculumItem {
   id: string;
   title: string;
-  description: string;
-  grade: string;
-  subject: string;
-  weeks: number;
-  items: number;
-  status: 'draft' | 'active' | 'completed' | 'archived';
-  progress: number;
-  classes: string[];
-  createdAt: string;
+  description?: string;
+  grade?: string;
+  subject?: string;
+  weeks?: number;
+  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  progress?: number;
   startDate?: string;
   endDate?: string;
+  createdAt: string;
+  _count?: {
+    items: number;
+    classes: number;
+  };
+  classes?: Array<{ id: string; name: string }>;
 }
 
-const mockCurriculums: CurriculumItem[] = [
-  {
-    id: '1',
-    title: '1학기 미술 커리큘럼',
-    description: '봄 테마를 중심으로 한 다양한 미술 활동',
-    grade: '1학년',
-    subject: '미술',
-    weeks: 16,
-    items: 32,
-    status: 'active',
-    progress: 45,
-    classes: ['1-A', '1-B', '1-C'],
-    createdAt: '2024-01-10',
-    startDate: '2024-03-01',
-    endDate: '2024-06-30',
-  },
-  {
-    id: '2',
-    title: '2학년 창의미술 과정',
-    description: '창의성 발달을 위한 다양한 표현 기법 학습',
-    grade: '2학년',
-    subject: '창의미술',
-    weeks: 12,
-    items: 24,
-    status: 'active',
-    progress: 30,
-    classes: ['2-A', '2-B'],
-    createdAt: '2024-01-15',
-    startDate: '2024-03-01',
-    endDate: '2024-05-31',
-  },
-  {
-    id: '3',
-    title: '방과후 미술교실',
-    description: '색칠하기와 만다라를 중심으로 한 방과후 프로그램',
-    grade: '전학년',
-    subject: '방과후',
-    weeks: 8,
-    items: 16,
-    status: 'draft',
-    progress: 0,
-    classes: [],
-    createdAt: '2024-01-20',
-  },
-  {
-    id: '4',
-    title: '겨울방학 특강',
-    description: '종이접기 마스터 클래스',
-    grade: '3-4학년',
-    subject: '특강',
-    weeks: 2,
-    items: 8,
-    status: 'completed',
-    progress: 100,
-    classes: ['3-A', '4-A'],
-    createdAt: '2023-12-01',
-    startDate: '2024-01-15',
-    endDate: '2024-01-26',
-  },
-];
-
-const statusConfig = {
-  draft: { label: '초안', color: 'bg-gray-100 text-gray-700' },
-  active: { label: '진행중', color: 'bg-green-100 text-green-700' },
-  completed: { label: '완료', color: 'bg-blue-100 text-blue-700' },
-  archived: { label: '보관됨', color: 'bg-gray-100 text-gray-500' },
+const statusConfig: Record<string, { label: string; color: string }> = {
+  DRAFT: { label: '초안', color: 'bg-gray-100 text-gray-700' },
+  ACTIVE: { label: '진행중', color: 'bg-green-100 text-green-700' },
+  COMPLETED: { label: '완료', color: 'bg-blue-100 text-blue-700' },
+  ARCHIVED: { label: '보관됨', color: 'bg-gray-100 text-gray-500' },
 };
 
 export default function CurriculumPage() {
+  const [curriculums, setCurriculums] = useState<CurriculumItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterGrade, setFilterGrade] = useState<string>('all');
 
-  const handleDeleteCurriculum = (id: string) => {
-    toast.success('커리큘럼이 삭제되었습니다');
+  useEffect(() => {
+    fetchCurriculums();
+  }, []);
+
+  const fetchCurriculums = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch('/api/curriculum');
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      setCurriculums(data);
+    } catch (error) {
+      console.error('Error fetching curriculums:', error);
+      toast.error('커리큘럼을 불러오는데 실패했습니다');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDuplicateCurriculum = (id: string) => {
-    toast.success('커리큘럼이 복제되었습니다');
+  const handleDeleteCurriculum = async (id: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return;
+
+    try {
+      const res = await fetch(`/api/curriculum/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete');
+
+      setCurriculums(curriculums.filter(c => c.id !== id));
+      toast.success('커리큘럼이 삭제되었습니다');
+    } catch (error) {
+      toast.error('삭제에 실패했습니다');
+    }
   };
 
-  const filteredCurriculums = mockCurriculums.filter((curriculum) => {
+  const handleDuplicateCurriculum = async (id: string) => {
+    const curriculum = curriculums.find(c => c.id === id);
+    if (!curriculum) return;
+
+    try {
+      const res = await fetch('/api/curriculum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `${curriculum.title} (복사본)`,
+          description: curriculum.description,
+          grade: curriculum.grade,
+          subject: curriculum.subject,
+          weeks: curriculum.weeks,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to duplicate');
+
+      const newCurriculum = await res.json();
+      setCurriculums([...curriculums, newCurriculum]);
+      toast.success('커리큘럼이 복제되었습니다');
+    } catch (error) {
+      toast.error('복제에 실패했습니다');
+    }
+  };
+
+  const filteredCurriculums = curriculums.filter((curriculum) => {
     const matchesSearch =
       curriculum.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      curriculum.description.toLowerCase().includes(searchQuery.toLowerCase());
+      (curriculum.description || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus =
-      filterStatus === 'all' || curriculum.status === filterStatus;
+      filterStatus === 'all' || curriculum.status === filterStatus.toUpperCase();
     const matchesGrade =
-      filterGrade === 'all' || curriculum.grade.includes(filterGrade);
+      filterGrade === 'all' || (curriculum.grade || '').includes(filterGrade);
     return matchesSearch && matchesStatus && matchesGrade;
   });
 
-  const activeCurriculums = mockCurriculums.filter((c) => c.status === 'active');
-  const totalItems = mockCurriculums.reduce((sum, c) => sum + c.items, 0);
+  const activeCurriculums = curriculums.filter((c) => c.status === 'ACTIVE');
+  const totalItems = curriculums.reduce((sum, c) => sum + (c._count?.items || 0), 0);
+  const totalClasses = curriculums.reduce((sum, c) => sum + (c._count?.classes || 0), 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -183,7 +189,7 @@ export default function CurriculumPage() {
                 <BookOpen className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{mockCurriculums.length}</p>
+                <p className="text-2xl font-bold">{curriculums.length}</p>
                 <p className="text-sm text-muted-foreground">전체 커리큘럼</p>
               </div>
             </div>
@@ -222,9 +228,7 @@ export default function CurriculumPage() {
                 <Users className="h-5 w-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {new Set(mockCurriculums.flatMap((c) => c.classes)).size}
-                </p>
+                <p className="text-2xl font-bold">{totalClasses}</p>
                 <p className="text-sm text-muted-foreground">연결된 학급</p>
               </div>
             </div>
@@ -306,38 +310,42 @@ export default function CurriculumPage() {
                               {curriculum.title}
                             </Link>
                             <p className="text-sm text-muted-foreground mt-1">
-                              {curriculum.description}
+                              {curriculum.description || '설명 없음'}
                             </p>
                           </div>
                           <Badge
-                            className={statusConfig[curriculum.status].color}
+                            className={statusConfig[curriculum.status]?.color || 'bg-gray-100'}
                           >
-                            {statusConfig[curriculum.status].label}
+                            {statusConfig[curriculum.status]?.label || curriculum.status}
                           </Badge>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-4 mt-3">
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <GraduationCap className="h-4 w-4" />
-                            {curriculum.grade}
-                          </div>
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <Calendar className="h-4 w-4" />
-                            {curriculum.weeks}주 과정
-                          </div>
+                          {curriculum.grade && (
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <GraduationCap className="h-4 w-4" />
+                              {curriculum.grade}
+                            </div>
+                          )}
+                          {curriculum.weeks && (
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              {curriculum.weeks}주 과정
+                            </div>
+                          )}
                           <div className="flex items-center gap-1 text-sm text-muted-foreground">
                             <BookOpen className="h-4 w-4" />
-                            {curriculum.items}개 항목
+                            {curriculum._count?.items || 0}개 항목
                           </div>
-                          {curriculum.classes.length > 0 && (
+                          {(curriculum._count?.classes || 0) > 0 && (
                             <div className="flex items-center gap-1 text-sm text-muted-foreground">
                               <Users className="h-4 w-4" />
-                              {curriculum.classes.join(', ')}
+                              {curriculum._count?.classes}개 학급
                             </div>
                           )}
                         </div>
 
-                        {curriculum.status === 'active' && (
+                        {curriculum.status === 'ACTIVE' && curriculum.progress !== undefined && (
                           <div className="mt-3">
                             <div className="flex items-center justify-between text-sm mb-1">
                               <span className="text-muted-foreground">진행률</span>
@@ -415,10 +423,10 @@ export default function CurriculumPage() {
         </TabsContent>
 
         <TabsContent value="active" className="space-y-4">
-          {filteredCurriculums.filter((c) => c.status === 'active').length > 0 ? (
+          {filteredCurriculums.filter((c) => c.status === 'ACTIVE').length > 0 ? (
             <div className="grid gap-4">
               {filteredCurriculums
-                .filter((c) => c.status === 'active')
+                .filter((c) => c.status === 'ACTIVE')
                 .map((curriculum) => (
                   <Card
                     key={curriculum.id}
@@ -439,20 +447,22 @@ export default function CurriculumPage() {
                           <p className="text-sm text-muted-foreground">
                             {curriculum.description}
                           </p>
-                          <div className="mt-3">
-                            <div className="flex items-center justify-between text-sm mb-1">
-                              <span className="text-muted-foreground">
-                                진행률
-                              </span>
-                              <span className="font-medium">
-                                {curriculum.progress}%
-                              </span>
+                          {curriculum.progress !== undefined && (
+                            <div className="mt-3">
+                              <div className="flex items-center justify-between text-sm mb-1">
+                                <span className="text-muted-foreground">
+                                  진행률
+                                </span>
+                                <span className="font-medium">
+                                  {curriculum.progress}%
+                                </span>
+                              </div>
+                              <Progress
+                                value={curriculum.progress}
+                                className="h-2"
+                              />
                             </div>
-                            <Progress
-                              value={curriculum.progress}
-                              className="h-2"
-                            />
-                          </div>
+                          )}
                         </div>
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/curriculum/${curriculum.id}`}>
@@ -474,10 +484,10 @@ export default function CurriculumPage() {
         </TabsContent>
 
         <TabsContent value="draft" className="space-y-4">
-          {filteredCurriculums.filter((c) => c.status === 'draft').length > 0 ? (
+          {filteredCurriculums.filter((c) => c.status === 'DRAFT').length > 0 ? (
             <div className="grid gap-4">
               {filteredCurriculums
-                .filter((c) => c.status === 'draft')
+                .filter((c) => c.status === 'DRAFT')
                 .map((curriculum) => (
                   <Card
                     key={curriculum.id}
@@ -519,11 +529,11 @@ export default function CurriculumPage() {
         </TabsContent>
 
         <TabsContent value="completed" className="space-y-4">
-          {filteredCurriculums.filter((c) => c.status === 'completed').length >
+          {filteredCurriculums.filter((c) => c.status === 'COMPLETED').length >
           0 ? (
             <div className="grid gap-4">
               {filteredCurriculums
-                .filter((c) => c.status === 'completed')
+                .filter((c) => c.status === 'COMPLETED')
                 .map((curriculum) => (
                   <Card
                     key={curriculum.id}
@@ -544,9 +554,11 @@ export default function CurriculumPage() {
                           <p className="text-sm text-muted-foreground">
                             {curriculum.description}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {curriculum.startDate} ~ {curriculum.endDate}
-                          </p>
+                          {(curriculum.startDate || curriculum.endDate) && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {curriculum.startDate} ~ {curriculum.endDate}
+                            </p>
+                          )}
                         </div>
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/curriculum/${curriculum.id}`}>

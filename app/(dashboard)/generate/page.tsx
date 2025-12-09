@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   Wand2,
   Sparkles,
@@ -15,18 +16,16 @@ import {
   Printer,
   Heart,
   Info,
-  ChevronDown,
   Check,
+  X,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -45,19 +44,41 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { ART_TECHNIQUES } from '@/lib/constants/artTechniques';
 import { THEMES } from '@/lib/constants/themes';
 import { AGE_GROUPS } from '@/lib/constants/ageGroups';
 
+interface GeneratedSheet {
+  id?: string;
+  imageUrl: string;
+  thumbnailUrl: string;
+  prompt: string;
+  metadata: {
+    technique: string;
+    theme: string;
+    subTheme: string;
+    ageGroup: string;
+    difficulty: number;
+  };
+}
+
 const popularTechniques = ['COLORING', 'MANDALA', 'DOT_TO_DOT', 'ORIGAMI', 'MAZE', 'PATTERN'];
 
 export default function GeneratePage() {
   const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [generatedSheets, setGeneratedSheets] = useState<GeneratedSheet[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [credits, setCredits] = useState<number | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Form state
   const [technique, setTechnique] = useState('COLORING');
@@ -74,7 +95,23 @@ export default function GeneratePage() {
 
   const selectedTechnique = ART_TECHNIQUES[technique as keyof typeof ART_TECHNIQUES];
   const selectedTheme = THEMES[theme as keyof typeof THEMES];
-  const selectedAgeGroup = AGE_GROUPS[ageGroup as keyof typeof AGE_GROUPS];
+  const selectedSheet = generatedSheets[selectedIndex];
+
+  // Fetch credits on mount
+  useEffect(() => {
+    async function fetchCredits() {
+      try {
+        const res = await fetch('/api/user/credits');
+        if (res.ok) {
+          const data = await res.json();
+          setCredits(data.credits);
+        }
+      } catch (error) {
+        console.error('Failed to fetch credits:', error);
+      }
+    }
+    fetchCredits();
+  }, []);
 
   const handleGenerate = async () => {
     if (!technique || !theme || !ageGroup) {
@@ -82,39 +119,160 @@ export default function GeneratePage() {
       return;
     }
 
+    if (credits !== null && credits < quantity[0]) {
+      toast.error(`크레딧이 부족합니다. 필요: ${quantity[0]}, 보유: ${credits}`);
+      return;
+    }
+
     setIsGenerating(true);
-    setGeneratedImages([]);
+    setGeneratedSheets([]);
 
     try {
-      // TODO: Implement actual API call
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          technique,
+          theme,
+          subTheme,
+          ageGroup,
+          prompt,
+          complexity: complexity[0],
+          quantity: quantity[0],
+          paperSize,
+          orientation,
+          includeInstructions,
+          includeWatermark,
+        }),
+      });
 
-      // Mock generated images
-      const mockImages = Array(quantity[0])
-        .fill(null)
-        .map((_, i) => `/api/placeholder/800/800?text=Generated+${i + 1}`);
+      const data = await response.json();
 
-      setGeneratedImages(mockImages);
-      setSelectedImage(mockImages[0]);
-      toast.success(`${quantity[0]}개의 도안이 생성되었습니다!`);
+      if (!response.ok) {
+        throw new Error(data.error || '도안 생성에 실패했습니다');
+      }
+
+      setGeneratedSheets(data.sheets || []);
+      setSelectedIndex(0);
+      setCredits(data.creditsRemaining);
+      toast.success(`${data.sheets?.length || 0}개의 도안이 생성되었습니다!`);
     } catch (error) {
-      toast.error('도안 생성에 실패했습니다');
+      const message = error instanceof Error ? error.message : '도안 생성에 실패했습니다';
+      toast.error(message);
       console.error('Generate error:', error);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!selectedSheet) return;
     toast.success('라이브러리에 저장되었습니다');
   };
 
-  const handleDownload = () => {
-    toast.success('다운로드를 시작합니다');
+  const handleDownload = async () => {
+    if (!selectedSheet) return;
+
+    try {
+      // For data URLs, we can download directly
+      if (selectedSheet.imageUrl.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = selectedSheet.imageUrl;
+        link.download = `artsheet_${technique}_${theme}_${Date.now()}.svg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('다운로드가 시작되었습니다');
+      } else {
+        // For regular URLs
+        const response = await fetch(selectedSheet.imageUrl);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `artsheet_${technique}_${theme}_${Date.now()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success('다운로드가 시작되었습니다');
+      }
+    } catch (error) {
+      toast.error('다운로드에 실패했습니다');
+      console.error('Download error:', error);
+    }
   };
 
   const handlePrint = () => {
-    window.print();
+    if (!selectedSheet) return;
+
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('팝업이 차단되었습니다. 팝업을 허용해주세요.');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>ArtSheet Pro - 인쇄</title>
+          <style>
+            @media print {
+              body { margin: 0; padding: 0; }
+              img { max-width: 100%; height: auto; page-break-inside: avoid; }
+            }
+            body {
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              min-height: 100vh;
+              margin: 0;
+              padding: 20px;
+              box-sizing: border-box;
+            }
+            img {
+              max-width: 100%;
+              max-height: 100vh;
+              object-fit: contain;
+            }
+          </style>
+        </head>
+        <body>
+          <img src="${selectedSheet.imageUrl}" onload="window.print(); window.close();" />
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleShare = async () => {
+    if (!selectedSheet) return;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'ArtSheet Pro 도안',
+          text: `${selectedTheme?.name || theme} 주제의 ${selectedTechnique?.name || technique} 도안`,
+          url: window.location.href,
+        });
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          toast.error('공유에 실패했습니다');
+        }
+      }
+    } else {
+      // Fallback: copy URL to clipboard
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success('링크가 클립보드에 복사되었습니다');
+      } catch {
+        toast.error('클립보드 복사에 실패했습니다');
+      }
+    }
   };
 
   return (
@@ -132,7 +290,7 @@ export default function GeneratePage() {
         </div>
         <Badge variant="outline" className="w-fit">
           <Sparkles className="h-3.5 w-3.5 mr-1" />
-          남은 크레딧: 10
+          남은 크레딧: {credits !== null ? credits : '...'}
         </Badge>
       </div>
 
@@ -394,7 +552,7 @@ export default function GeneratePage() {
                 ) : (
                   <>
                     <Sparkles className="h-5 w-5" />
-                    도안 생성하기
+                    도안 생성하기 ({quantity[0]} 크레딧)
                   </>
                 )}
               </Button>
@@ -408,9 +566,9 @@ export default function GeneratePage() {
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">미리보기</CardTitle>
-                {generatedImages.length > 0 && (
+                {generatedSheets.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={handleGenerate}>
+                    <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isGenerating}>
                       <RefreshCw className="h-4 w-4 mr-1" />
                       다시 생성
                     </Button>
@@ -432,47 +590,49 @@ export default function GeneratePage() {
                     </p>
                   </div>
                 </div>
-              ) : generatedImages.length > 0 ? (
+              ) : generatedSheets.length > 0 ? (
                 <div className="space-y-4">
                   {/* Main Preview */}
-                  <div className="relative aspect-[3/4] bg-muted rounded-lg overflow-hidden border">
-                    {selectedImage && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center text-muted-foreground">
-                          <Wand2 className="h-16 w-16 mx-auto mb-4" />
-                          <p>생성된 도안 미리보기</p>
-                        </div>
-                      </div>
+                  <div
+                    className="relative aspect-[3/4] bg-white rounded-lg overflow-hidden border cursor-pointer"
+                    onClick={() => setShowPreview(true)}
+                  >
+                    {selectedSheet && (
+                      <img
+                        src={selectedSheet.imageUrl}
+                        alt="생성된 도안"
+                        className="w-full h-full object-contain"
+                      />
                     )}
                     <div className="absolute top-2 right-2 flex gap-1">
-                      <Button variant="secondary" size="icon-sm">
+                      <Button variant="secondary" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setShowPreview(true); }}>
                         <ZoomIn className="h-4 w-4" />
                       </Button>
-                      <Button variant="secondary" size="icon-sm">
+                      <Button variant="secondary" size="icon" className="h-8 w-8">
                         <Heart className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
 
                   {/* Thumbnails */}
-                  {generatedImages.length > 1 && (
+                  {generatedSheets.length > 1 && (
                     <div className="flex gap-2 overflow-x-auto pb-2">
-                      {generatedImages.map((img, index) => (
+                      {generatedSheets.map((sheet, index) => (
                         <button
                           key={index}
-                          onClick={() => setSelectedImage(img)}
+                          onClick={() => setSelectedIndex(index)}
                           className={`relative h-20 w-20 rounded-lg border-2 overflow-hidden shrink-0 ${
-                            selectedImage === img
+                            selectedIndex === index
                               ? 'border-primary'
-                              : 'border-transparent'
+                              : 'border-muted'
                           }`}
                         >
-                          <div className="absolute inset-0 bg-muted flex items-center justify-center">
-                            <span className="text-sm font-medium">
-                              #{index + 1}
-                            </span>
-                          </div>
-                          {selectedImage === img && (
+                          <img
+                            src={sheet.thumbnailUrl}
+                            alt={`도안 ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          {selectedIndex === index && (
                             <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
                               <Check className="h-5 w-5 text-primary" />
                             </div>
@@ -496,7 +656,7 @@ export default function GeneratePage() {
                       <Printer className="h-4 w-4" />
                       인쇄
                     </Button>
-                    <Button variant="outline" className="gap-1">
+                    <Button variant="outline" className="gap-1" onClick={handleShare}>
                       <Share2 className="h-4 w-4" />
                       공유
                     </Button>
@@ -565,6 +725,36 @@ export default function GeneratePage() {
           )}
         </div>
       </div>
+
+      {/* Full Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>도안 미리보기</span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleDownload}>
+                  <Download className="h-4 w-4 mr-1" />
+                  다운로드
+                </Button>
+                <Button variant="outline" size="sm" onClick={handlePrint}>
+                  <Printer className="h-4 w-4 mr-1" />
+                  인쇄
+                </Button>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          {selectedSheet && (
+            <div className="flex justify-center">
+              <img
+                src={selectedSheet.imageUrl}
+                alt="생성된 도안"
+                className="max-w-full max-h-[70vh] object-contain"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

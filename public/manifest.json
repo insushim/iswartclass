@@ -1,0 +1,10 @@
+{
+  "name": "ArtSheet Pro",
+  "short_name": "ArtSheet",
+  "description": "AI-powered art worksheet generator for teachers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "icons": []
+}

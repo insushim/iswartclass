@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Image,
@@ -18,6 +18,7 @@ import {
   Trash2,
   ExternalLink,
   Printer,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,149 +53,109 @@ import { toast } from 'sonner';
 
 interface Portfolio {
   id: string;
-  studentId: string;
-  studentName: string;
-  studentClass: string;
   title: string;
-  description: string;
-  works: PortfolioWork[];
+  description?: string;
   isPublic: boolean;
+  shareCode?: string;
   createdAt: string;
   updatedAt: string;
+  student?: {
+    id: string;
+    name: string;
+    class?: {
+      id: string;
+      name: string;
+    };
+  };
+  _count?: {
+    items: number;
+  };
+  items?: Array<{
+    id: string;
+    title: string;
+    technique?: string;
+    theme?: string;
+    imageUrl?: string;
+    completedAt?: string;
+    rating?: number;
+  }>;
 }
-
-interface PortfolioWork {
-  id: string;
-  title: string;
-  technique: string;
-  theme: string;
-  thumbnail: string;
-  completedAt: string;
-  rating?: number;
-  comment?: string;
-}
-
-const mockPortfolios: Portfolio[] = [
-  {
-    id: '1',
-    studentId: '1',
-    studentName: '김민준',
-    studentClass: '1-A반',
-    title: '민준이의 미술 작품집',
-    description: '1학년 1학기 미술 활동 모음',
-    works: [
-      {
-        id: '1',
-        title: '가족 그림',
-        technique: '색칠하기',
-        theme: '가족',
-        thumbnail: '/api/placeholder/300/300',
-        completedAt: '2024-03-15',
-        rating: 5,
-      },
-      {
-        id: '2',
-        title: '봄 꽃',
-        technique: '만다라',
-        theme: '자연',
-        thumbnail: '/api/placeholder/300/300',
-        completedAt: '2024-03-20',
-        rating: 4,
-      },
-      {
-        id: '3',
-        title: '우리집 강아지',
-        technique: '색칠하기',
-        theme: '동물',
-        thumbnail: '/api/placeholder/300/300',
-        completedAt: '2024-03-25',
-        rating: 5,
-      },
-    ],
-    isPublic: true,
-    createdAt: '2024-03-01',
-    updatedAt: '2024-03-25',
-  },
-  {
-    id: '2',
-    studentId: '2',
-    studentName: '이서연',
-    studentClass: '1-A반',
-    title: '서연이의 그림 일기',
-    description: '매일 그리는 그림 일기',
-    works: [
-      {
-        id: '4',
-        title: '무지개 나라',
-        technique: '패턴',
-        theme: '판타지',
-        thumbnail: '/api/placeholder/300/300',
-        completedAt: '2024-03-10',
-        rating: 5,
-      },
-      {
-        id: '5',
-        title: '공룡 세계',
-        technique: '점잇기',
-        theme: '동물',
-        thumbnail: '/api/placeholder/300/300',
-        completedAt: '2024-03-18',
-        rating: 4,
-      },
-    ],
-    isPublic: true,
-    createdAt: '2024-03-01',
-    updatedAt: '2024-03-18',
-  },
-  {
-    id: '3',
-    studentId: '3',
-    studentName: '박지호',
-    studentClass: '1-B반',
-    title: '지호의 종이접기 컬렉션',
-    description: '종이접기 작품 모음',
-    works: [
-      {
-        id: '6',
-        title: '비행기',
-        technique: '종이접기',
-        theme: '탈것',
-        thumbnail: '/api/placeholder/300/300',
-        completedAt: '2024-03-12',
-        rating: 5,
-      },
-    ],
-    isPublic: false,
-    createdAt: '2024-03-01',
-    updatedAt: '2024-03-12',
-  },
-];
 
 export default function PortfolioPage() {
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterClass, setFilterClass] = useState<string>('all');
   const [selectedPortfolio, setSelectedPortfolio] = useState<Portfolio | null>(null);
 
-  const handleSharePortfolio = (id: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/portfolio/view/${id}`);
+  useEffect(() => {
+    fetchPortfolios();
+  }, []);
+
+  const fetchPortfolios = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch('/api/portfolio');
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      setPortfolios(data);
+    } catch (error) {
+      console.error('Error fetching portfolios:', error);
+      toast.error('포트폴리오를 불러오는데 실패했습니다');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSharePortfolio = (portfolio: Portfolio) => {
+    const shareUrl = portfolio.shareCode
+      ? `${window.location.origin}/portfolio/view/${portfolio.shareCode}`
+      : `${window.location.origin}/portfolio/${portfolio.id}`;
+    navigator.clipboard.writeText(shareUrl);
     toast.success('공유 링크가 복사되었습니다');
   };
 
   const handleDownloadPortfolio = (id: string) => {
     toast.success('PDF 다운로드를 시작합니다');
+    // TODO: Implement PDF download
   };
 
-  const filteredPortfolios = mockPortfolios.filter((portfolio) => {
+  const handleDeletePortfolio = async (id: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return;
+
+    try {
+      const res = await fetch(`/api/portfolio/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete');
+
+      setPortfolios(portfolios.filter(p => p.id !== id));
+      toast.success('포트폴리오가 삭제되었습니다');
+    } catch (error) {
+      toast.error('삭제에 실패했습니다');
+    }
+  };
+
+  const filteredPortfolios = portfolios.filter((portfolio) => {
     const matchesSearch =
-      portfolio.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (portfolio.student?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       portfolio.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClass =
-      filterClass === 'all' || portfolio.studentClass === filterClass;
+      filterClass === 'all' || portfolio.student?.class?.id === filterClass;
     return matchesSearch && matchesClass;
   });
 
-  const totalWorks = mockPortfolios.reduce((sum, p) => sum + p.works.length, 0);
-  const uniqueClasses = [...new Set(mockPortfolios.map((p) => p.studentClass))];
+  const totalWorks = portfolios.reduce((sum, p) => sum + (p._count?.items || 0), 0);
+  const uniqueClasses = portfolios
+    .filter(p => p.student?.class?.id)
+    .map(p => p.student!.class!)
+    .filter((cls, index, self) => self.findIndex(c => c.id === cls.id) === index);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -226,7 +187,7 @@ export default function PortfolioPage() {
                 <Image className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{mockPortfolios.length}</p>
+                <p className="text-2xl font-bold">{portfolios.length}</p>
                 <p className="text-sm text-muted-foreground">전체 포트폴리오</p>
               </div>
             </div>
@@ -253,7 +214,7 @@ export default function PortfolioPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {mockPortfolios.filter((p) => p.isPublic).length}
+                  {portfolios.filter((p) => p.isPublic).length}
                 </p>
                 <p className="text-sm text-muted-foreground">공개 포트폴리오</p>
               </div>
@@ -293,8 +254,8 @@ export default function PortfolioPage() {
           <SelectContent>
             <SelectItem value="all">모든 학급</SelectItem>
             {uniqueClasses.map((cls) => (
-              <SelectItem key={cls} value={cls}>
-                {cls}
+              <SelectItem key={cls.id} value={cls.id}>
+                {cls.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -311,7 +272,7 @@ export default function PortfolioPage() {
             >
               {/* Preview Grid */}
               <div className="grid grid-cols-3 gap-0.5 bg-muted">
-                {portfolio.works.slice(0, 3).map((work, index) => (
+                {(portfolio.items || []).slice(0, 3).map((work, index) => (
                   <div
                     key={work.id}
                     className="aspect-square bg-muted-foreground/10 flex items-center justify-center"
@@ -329,8 +290,8 @@ export default function PortfolioPage() {
                     </span>
                   </div>
                 ))}
-                {portfolio.works.length < 3 &&
-                  Array(3 - portfolio.works.length)
+                {(portfolio._count?.items || 0) < 3 &&
+                  Array(3 - (portfolio._count?.items || 0))
                     .fill(null)
                     .map((_, index) => (
                       <div
@@ -345,13 +306,13 @@ export default function PortfolioPage() {
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
                       <AvatarFallback>
-                        {portfolio.studentName.charAt(0)}
+                        {portfolio.student?.name?.charAt(0) || '?'}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <h3 className="font-semibold">{portfolio.title}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {portfolio.studentName} · {portfolio.studentClass}
+                        {portfolio.student?.name || '학생 미지정'} · {portfolio.student?.class?.name || '학급 미지정'}
                       </p>
                     </div>
                   </div>
@@ -375,7 +336,7 @@ export default function PortfolioPage() {
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => handleSharePortfolio(portfolio.id)}
+                        onClick={() => handleSharePortfolio(portfolio)}
                       >
                         <Share2 className="h-4 w-4 mr-2" />
                         공유
@@ -387,7 +348,10 @@ export default function PortfolioPage() {
                         PDF 다운로드
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-destructive">
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={() => handleDeletePortfolio(portfolio.id)}
+                      >
                         <Trash2 className="h-4 w-4 mr-2" />
                         삭제
                       </DropdownMenuItem>
@@ -396,17 +360,17 @@ export default function PortfolioPage() {
                 </div>
 
                 <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                  {portfolio.description}
+                  {portfolio.description || '설명 없음'}
                 </p>
 
                 <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Image className="h-4 w-4" />
-                    {portfolio.works.length}개 작품
+                    {portfolio._count?.items || 0}개 작품
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
-                    {portfolio.updatedAt}
+                    {new Date(portfolio.updatedAt).toLocaleDateString('ko-KR')}
                   </span>
                 </div>
 
@@ -428,7 +392,7 @@ export default function PortfolioPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleSharePortfolio(portfolio.id)}
+                    onClick={() => handleSharePortfolio(portfolio)}
                   >
                     <Share2 className="h-4 w-4" />
                   </Button>

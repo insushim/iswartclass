@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   GraduationCap,
@@ -17,6 +17,7 @@ import {
   Upload,
   Filter,
   Eye,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,87 +52,50 @@ import { toast } from 'sonner';
 interface Student {
   id: string;
   name: string;
-  className: string;
-  grade: string;
-  studentNumber: string;
+  nickname?: string;
+  avatarUrl?: string;
+  ageGroup: string;
   parentEmail?: string;
   parentPhone?: string;
-  completedWorks: number;
-  achievements: number;
-  avatar?: string;
-  status: 'active' | 'inactive';
-  joinedAt: string;
+  totalActivities: number;
+  class?: {
+    id: string;
+    name: string;
+    grade?: string;
+  };
+  _count?: {
+    portfolios: number;
+    achievements: number;
+  };
+  createdAt: string;
 }
 
-const mockStudents: Student[] = [
-  {
-    id: '1',
-    name: '김민준',
-    className: '1-A반',
-    grade: '1학년',
-    studentNumber: '1',
-    parentEmail: 'parent1@example.com',
-    parentPhone: '010-1234-5678',
-    completedWorks: 12,
-    achievements: 3,
-    status: 'active',
-    joinedAt: '2024-03-01',
-  },
-  {
-    id: '2',
-    name: '이서연',
-    className: '1-A반',
-    grade: '1학년',
-    studentNumber: '2',
-    parentEmail: 'parent2@example.com',
-    completedWorks: 15,
-    achievements: 5,
-    status: 'active',
-    joinedAt: '2024-03-01',
-  },
-  {
-    id: '3',
-    name: '박지호',
-    className: '1-B반',
-    grade: '1학년',
-    studentNumber: '1',
-    parentPhone: '010-2345-6789',
-    completedWorks: 10,
-    achievements: 2,
-    status: 'active',
-    joinedAt: '2024-03-01',
-  },
-  {
-    id: '4',
-    name: '최서아',
-    className: '2-A반',
-    grade: '2학년',
-    studentNumber: '1',
-    parentEmail: 'parent4@example.com',
-    parentPhone: '010-3456-7890',
-    completedWorks: 20,
-    achievements: 7,
-    status: 'active',
-    joinedAt: '2024-03-01',
-  },
-  {
-    id: '5',
-    name: '정예준',
-    className: '2-A반',
-    grade: '2학년',
-    studentNumber: '2',
-    completedWorks: 8,
-    achievements: 1,
-    status: 'inactive',
-    joinedAt: '2024-03-01',
-  },
-];
-
 export default function StudentsPage() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterClass, setFilterClass] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+
+  // 학생 목록 로드
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const fetchStudents = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch('/api/students');
+      if (!res.ok) throw new Error('Failed to fetch students');
+      const data = await res.json();
+      setStudents(data);
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      toast.error('학생 목록을 불러오는데 실패했습니다');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSelectStudent = (id: string) => {
     setSelectedStudents((prev) =>
@@ -140,30 +104,67 @@ export default function StudentsPage() {
   };
 
   const handleSelectAll = () => {
-    if (selectedStudents.length === mockStudents.length) {
+    if (selectedStudents.length === filteredStudents.length) {
       setSelectedStudents([]);
     } else {
-      setSelectedStudents(mockStudents.map((s) => s.id));
+      setSelectedStudents(filteredStudents.map((s) => s.id));
     }
   };
 
-  const handleDeleteStudents = () => {
-    toast.success(`${selectedStudents.length}명의 학생이 삭제되었습니다`);
-    setSelectedStudents([]);
+  const handleDeleteStudent = async (id: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return;
+
+    try {
+      const res = await fetch(`/api/students/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete student');
+
+      setStudents(students.filter(s => s.id !== id));
+      setSelectedStudents(selectedStudents.filter(s => s !== id));
+      toast.success('학생이 삭제되었습니다');
+    } catch (error) {
+      toast.error('삭제에 실패했습니다');
+    }
   };
 
-  const filteredStudents = mockStudents.filter((student) => {
+  const handleDeleteStudents = async () => {
+    if (!confirm(`${selectedStudents.length}명의 학생을 삭제하시겠습니까?`)) return;
+
+    try {
+      await Promise.all(
+        selectedStudents.map(id => fetch(`/api/students/${id}`, { method: 'DELETE' }))
+      );
+      setStudents(students.filter(s => !selectedStudents.includes(s.id)));
+      setSelectedStudents([]);
+      toast.success(`${selectedStudents.length}명의 학생이 삭제되었습니다`);
+    } catch (error) {
+      toast.error('일부 학생 삭제에 실패했습니다');
+    }
+  };
+
+  const filteredStudents = students.filter((student) => {
     const matchesSearch =
       student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.className.toLowerCase().includes(searchQuery.toLowerCase());
+      (student.class?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClass =
-      filterClass === 'all' || student.className === filterClass;
-    const matchesStatus =
-      filterStatus === 'all' || student.status === filterStatus;
-    return matchesSearch && matchesClass && matchesStatus;
+      filterClass === 'all' || student.class?.id === filterClass;
+    return matchesSearch && matchesClass;
   });
 
-  const uniqueClasses = [...new Set(mockStudents.map((s) => s.className))];
+  const uniqueClasses = students
+    .filter(s => s.class?.id)
+    .map(s => s.class!)
+    .filter((cls, index, self) => self.findIndex(c => c.id === cls.id) === index);
+
+  const totalAchievements = students.reduce((sum, s) => sum + (s._count?.achievements || 0), 0);
+  const totalActivities = students.reduce((sum, s) => sum + (s.totalActivities || 0), 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -201,7 +202,7 @@ export default function StudentsPage() {
                 <GraduationCap className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{mockStudents.length}</p>
+                <p className="text-2xl font-bold">{students.length}</p>
                 <p className="text-sm text-muted-foreground">전체 학생</p>
               </div>
             </div>
@@ -214,10 +215,8 @@ export default function StudentsPage() {
                 <Users className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockStudents.filter((s) => s.status === 'active').length}
-                </p>
-                <p className="text-sm text-muted-foreground">활동 학생</p>
+                <p className="text-2xl font-bold">{uniqueClasses.length}</p>
+                <p className="text-sm text-muted-foreground">학급 수</p>
               </div>
             </div>
           </CardContent>
@@ -229,9 +228,7 @@ export default function StudentsPage() {
                 <Award className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockStudents.reduce((sum, s) => sum + s.achievements, 0)}
-                </p>
+                <p className="text-2xl font-bold">{totalAchievements}</p>
                 <p className="text-sm text-muted-foreground">총 획득 배지</p>
               </div>
             </div>
@@ -244,10 +241,8 @@ export default function StudentsPage() {
                 <GraduationCap className="h-5 w-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockStudents.reduce((sum, s) => sum + s.completedWorks, 0)}
-                </p>
-                <p className="text-sm text-muted-foreground">완료 작품</p>
+                <p className="text-2xl font-bold">{totalActivities}</p>
+                <p className="text-sm text-muted-foreground">완료 활동</p>
               </div>
             </div>
           </CardContent>
@@ -271,21 +266,11 @@ export default function StudentsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">모든 학급</SelectItem>
-            {uniqueClasses.map((cls) => (
-              <SelectItem key={cls} value={cls}>
-                {cls}
+            {uniqueClasses.map((cls) => cls && (
+              <SelectItem key={cls.id} value={cls.id}>
+                {cls.name}
               </SelectItem>
             ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="상태" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">모든 상태</SelectItem>
-            <SelectItem value="active">활동</SelectItem>
-            <SelectItem value="inactive">비활동</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline">
@@ -298,7 +283,7 @@ export default function StudentsPage() {
       {selectedStudents.length > 0 && (
         <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
           <Checkbox
-            checked={selectedStudents.length === mockStudents.length}
+            checked={selectedStudents.length === filteredStudents.length}
             onCheckedChange={handleSelectAll}
           />
           <span className="text-sm font-medium">
@@ -331,15 +316,15 @@ export default function StudentsPage() {
               <TableRow>
                 <TableHead className="w-12">
                   <Checkbox
-                    checked={selectedStudents.length === mockStudents.length}
+                    checked={selectedStudents.length === filteredStudents.length && filteredStudents.length > 0}
                     onCheckedChange={handleSelectAll}
                   />
                 </TableHead>
                 <TableHead>학생</TableHead>
                 <TableHead>학급</TableHead>
-                <TableHead className="text-center">완료 작품</TableHead>
+                <TableHead className="text-center">활동</TableHead>
                 <TableHead className="text-center">배지</TableHead>
-                <TableHead className="text-center">상태</TableHead>
+                <TableHead className="text-center">포트폴리오</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
@@ -355,7 +340,7 @@ export default function StudentsPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9">
-                        <AvatarImage src={student.avatar} />
+                        <AvatarImage src={student.avatarUrl} />
                         <AvatarFallback>
                           {student.name.charAt(0)}
                         </AvatarFallback>
@@ -367,32 +352,32 @@ export default function StudentsPage() {
                         >
                           {student.name}
                         </Link>
-                        <p className="text-xs text-muted-foreground">
-                          번호: {student.studentNumber}
-                        </p>
+                        {student.nickname && (
+                          <p className="text-xs text-muted-foreground">
+                            {student.nickname}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{student.className}</Badge>
+                    {student.class ? (
+                      <Badge variant="secondary">{student.class.name}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">미배정</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-center">
-                    {student.completedWorks}
+                    {student.totalActivities || 0}
                   </TableCell>
                   <TableCell className="text-center">
                     <div className="flex items-center justify-center gap-1">
                       <Award className="h-4 w-4 text-yellow-500" />
-                      {student.achievements}
+                      {student._count?.achievements || 0}
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge
-                      variant={
-                        student.status === 'active' ? 'default' : 'secondary'
-                      }
-                    >
-                      {student.status === 'active' ? '활동' : '비활동'}
-                    </Badge>
+                    {student._count?.portfolios || 0}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -427,7 +412,10 @@ export default function StudentsPage() {
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => handleDeleteStudent(student.id)}
+                        >
                           <Trash2 className="h-4 w-4 mr-2" />
                           삭제
                         </DropdownMenuItem>
