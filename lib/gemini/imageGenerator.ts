@@ -80,60 +80,52 @@ const ageComplexity: Record<string, string> = {
   ALL: 'Moderate complexity suitable for various ages',
 };
 
-// Generate image using Imagen 3
-async function generateWithImagen3(prompt: string): Promise<string | null> {
+// Generate image using Gemini 2.0 Flash experimental with image output
+async function generateWithGemini(prompt: string): Promise<string | null> {
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
+    console.log('Attempting Gemini 2.0 Flash image generation...');
 
-    // Use the models.generateImages method
-    const response = await (genAI as any).models.generateImages({
-      model: 'imagen-3.0-generate-002',
-      prompt: prompt,
-      config: {
-        numberOfImages: 1,
-        aspectRatio: '3:4', // Portrait orientation for worksheets
-      },
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+          },
+        }),
+      }
+    );
 
-    if (response.generatedImages && response.generatedImages.length > 0) {
-      const imageBytes = response.generatedImages[0].image.imageBytes;
-      return `data:image/png;base64,${imageBytes}`;
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Gemini API error:', response.status, errorText);
+      return null;
     }
 
-    return null;
-  } catch (error) {
-    console.error('Imagen 3 generation failed:', error);
-    return null;
-  }
-}
+    const data = await response.json();
+    console.log('Gemini response received');
 
-// Alternative: Generate image using Gemini 2.0 Flash with image generation
-async function generateWithGemini2(prompt: string): Promise<string | null> {
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
-    });
-
-    // Gemini 2.0 can generate images with specific config
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseModalities: ['image', 'text'],
-      } as any,
-    });
-
-    const response = result.response;
-    const parts = response.candidates?.[0]?.content?.parts || [];
-
-    for (const part of parts) {
-      if ((part as any).inlineData) {
-        const inlineData = (part as any).inlineData;
-        return `data:${inlineData.mimeType};base64,${inlineData.data}`;
+    // Extract image from response
+    const candidates = data.candidates || [];
+    for (const candidate of candidates) {
+      const parts = candidate.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData) {
+          const { mimeType, data: imageData } = part.inlineData;
+          console.log('Image found in response');
+          return `data:${mimeType};base64,${imageData}`;
+        }
       }
     }
 
+    console.log('No image found in Gemini response');
     return null;
   } catch (error) {
     console.error('Gemini 2.0 image generation failed:', error);
@@ -141,11 +133,58 @@ async function generateWithGemini2(prompt: string): Promise<string | null> {
   }
 }
 
-// Generate a placeholder SVG for fallback
+// Generate image using Imagen 3 via REST API
+async function generateWithImagen3(prompt: string): Promise<string | null> {
+  try {
+    console.log('Attempting Imagen 3 generation...');
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: '3:4',
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Imagen 3 API error:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (data.predictions && data.predictions.length > 0) {
+      const imageBytes = data.predictions[0].bytesBase64Encoded;
+      if (imageBytes) {
+        console.log('Imagen 3 image generated successfully');
+        return `data:image/png;base64,${imageBytes}`;
+      }
+    }
+
+    console.log('No image in Imagen 3 response');
+    return null;
+  } catch (error) {
+    console.error('Imagen 3 generation failed:', error);
+    return null;
+  }
+}
+
+// Generate a detailed placeholder SVG
 function generatePlaceholderSVG(
   technique: string,
   theme: string,
   subTheme: string,
+  additionalDetails: string,
   index: number
 ): string {
   const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -160,47 +199,96 @@ function generatePlaceholderSVG(
     LINE_DRAWING: '선 그리기',
   }[technique] || technique;
 
+  const themeEmoji = {
+    ANIMALS: '🐱',
+    NATURE: '🌸',
+    VEHICLES: '🚗',
+    FOOD: '🍎',
+    SPACE: '🚀',
+    OCEAN: '🐠',
+    FANTASY: '🦄',
+    SPORTS: '⚽',
+  }[theme] || '🎨';
+
+  // Create a more meaningful placeholder based on the request
+  const title = subTheme || theme;
+  const description = additionalDetails || `${theme} 주제의 ${techniqueLabel} 도안`;
+
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
   <rect width="800" height="1000" fill="white"/>
-  <rect x="40" y="40" width="720" height="920" fill="none" stroke="${color}" stroke-width="4" stroke-dasharray="10,5"/>
+  <rect width="800" height="1000" fill="url(#grid)"/>
+
+  <!-- Border -->
+  <rect x="30" y="30" width="740" height="940" fill="none" stroke="${color}" stroke-width="3" rx="20"/>
 
   <!-- Title area -->
-  <rect x="60" y="60" width="680" height="80" fill="${color}" opacity="0.1" rx="10"/>
-  <text x="400" y="115" font-family="Arial, sans-serif" font-size="32" fill="${color}" text-anchor="middle" font-weight="bold">
-    ${subTheme || theme}
+  <rect x="50" y="50" width="700" height="100" fill="${color}" opacity="0.1" rx="15"/>
+  <text x="400" y="95" font-family="Arial, sans-serif" font-size="36" fill="${color}" text-anchor="middle" font-weight="bold">
+    ${title}
+  </text>
+  <text x="400" y="130" font-family="Arial, sans-serif" font-size="18" fill="#6b7280" text-anchor="middle">
+    ${techniqueLabel} 도안
   </text>
 
-  <!-- Main content area -->
-  <rect x="60" y="160" width="680" height="600" fill="#f8fafc" rx="10" stroke="#e2e8f0" stroke-width="2"/>
+  <!-- Main drawing area -->
+  <rect x="50" y="170" width="700" height="600" fill="#fafafa" rx="15" stroke="#e5e7eb" stroke-width="2"/>
 
-  <!-- Loading indicator -->
-  <text x="400" y="420" font-family="Arial, sans-serif" font-size="24" fill="#94a3b8" text-anchor="middle">
-    이미지 생성 중...
-  </text>
-  <text x="400" y="460" font-family="Arial, sans-serif" font-size="16" fill="#cbd5e1" text-anchor="middle">
-    Imagen 3로 도안을 생성하고 있습니다
+  <!-- Central icon -->
+  <text x="400" y="450" font-family="Arial" font-size="120" text-anchor="middle">
+    ${themeEmoji}
   </text>
 
-  <!-- Spinner animation -->
-  <circle cx="400" cy="520" r="30" fill="none" stroke="${color}" stroke-width="4" stroke-dasharray="60 30" opacity="0.5">
-    <animateTransform attributeName="transform" type="rotate" from="0 400 520" to="360 400 520" dur="1s" repeatCount="indefinite"/>
-  </circle>
+  <!-- Technique indicator -->
+  <text x="400" y="550" font-family="Arial, sans-serif" font-size="20" fill="#9ca3af" text-anchor="middle">
+    ${description}
+  </text>
+
+  <!-- Drawing guide lines based on technique -->
+  ${technique === 'COLORING' ? `
+    <circle cx="400" cy="420" r="150" fill="none" stroke="#d1d5db" stroke-width="2" stroke-dasharray="10,5"/>
+  ` : technique === 'MANDALA' ? `
+    <circle cx="400" cy="420" r="120" fill="none" stroke="#d1d5db" stroke-width="2"/>
+    <circle cx="400" cy="420" r="80" fill="none" stroke="#d1d5db" stroke-width="2"/>
+    <circle cx="400" cy="420" r="40" fill="none" stroke="#d1d5db" stroke-width="2"/>
+  ` : technique === 'DOT_CONNECT' ? `
+    <circle cx="300" cy="350" r="8" fill="${color}"/><text x="300" y="335" font-size="14" fill="${color}" text-anchor="middle">1</text>
+    <circle cx="400" cy="300" r="8" fill="${color}"/><text x="400" y="285" font-size="14" fill="${color}" text-anchor="middle">2</text>
+    <circle cx="500" cy="350" r="8" fill="${color}"/><text x="500" y="335" font-size="14" fill="${color}" text-anchor="middle">3</text>
+    <circle cx="450" cy="450" r="8" fill="${color}"/><text x="450" y="435" font-size="14" fill="${color}" text-anchor="middle">4</text>
+    <circle cx="350" cy="450" r="8" fill="${color}"/><text x="350" y="435" font-size="14" fill="${color}" text-anchor="middle">5</text>
+  ` : ''}
 
   <!-- Instructions area -->
-  <rect x="60" y="780" width="680" height="160" fill="#f1f5f9" rx="10"/>
-  <text x="400" y="820" font-family="Arial, sans-serif" font-size="18" fill="#64748b" text-anchor="middle">
-    기법: ${techniqueLabel}
+  <rect x="50" y="790" width="700" height="160" fill="#f8fafc" rx="15" stroke="#e5e7eb" stroke-width="1"/>
+
+  <text x="80" y="830" font-family="Arial, sans-serif" font-size="16" fill="#374151" font-weight="bold">
+    활동 안내
   </text>
-  <text x="400" y="850" font-family="Arial, sans-serif" font-size="16" fill="#94a3b8" text-anchor="middle">
-    주제: ${theme} - ${subTheme || ''}
+  <text x="80" y="860" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
+    • 기법: ${techniqueLabel}
   </text>
-  <text x="400" y="880" font-family="Arial, sans-serif" font-size="14" fill="#cbd5e1" text-anchor="middle">
-    ArtSheet Pro에서 생성됨
+  <text x="80" y="885" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
+    • 주제: ${theme}${subTheme ? ` - ${subTheme}` : ''}
+  </text>
+  <text x="80" y="910" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
+    • 자유롭게 색칠하거나 그려보세요!
+  </text>
+
+  <!-- Footer -->
+  <text x="400" y="970" font-family="Arial, sans-serif" font-size="12" fill="#9ca3af" text-anchor="middle">
+    ArtSheet Pro • AI 기반 미술 도안 생성 서비스
   </text>
 
   <!-- Page number -->
-  <text x="760" y="980" font-family="Arial, sans-serif" font-size="14" fill="#94a3b8" text-anchor="end">
+  <text x="750" y="970" font-family="Arial, sans-serif" font-size="12" fill="#9ca3af" text-anchor="end">
     #${index + 1}
   </text>
 </svg>`.trim();
@@ -217,16 +305,17 @@ function buildImagePrompt(options: GenerateOptions): string {
   let prompt = `${techniquePrompt}
 
 Subject: ${options.theme}${options.subTheme ? ` - ${options.subTheme}` : ''}
-${options.additionalDetails ? `Details: ${options.additionalDetails}` : ''}
+${options.additionalDetails ? `Specific details: ${options.additionalDetails}` : ''}
 
 Age appropriateness: ${ageHint}
 Difficulty level: ${options.difficulty}/5
 
-Important requirements:
-- Must be suitable for children's art activity
-- Clean, professional quality
-- Ready to print on paper
-- Safe and appropriate content only`;
+IMPORTANT:
+- Create a printable worksheet/coloring page
+- Use only BLACK lines on WHITE background
+- No colors, shading, or gradients
+- Clean, professional quality suitable for printing
+- Safe and appropriate for children`;
 
   return prompt;
 }
@@ -241,6 +330,7 @@ async function generateDescription(options: PromptOptions): Promise<string> {
 - 세부 주제: ${options.subTheme || '없음'}
 - 연령대: ${options.ageGroup}
 - 난이도: ${options.difficulty}/5
+${options.additionalDetails ? `- 추가 설명: ${options.additionalDetails}` : ''}
 
 설명만 작성하고 다른 내용은 포함하지 마세요.`;
 
@@ -256,8 +346,11 @@ export async function generateArtSheets(options: GenerateOptions): Promise<Gener
   const count = options.count || 1;
   const results: GeneratedSheet[] = [];
 
+  console.log('Starting art sheet generation:', options);
+
   // Build the image generation prompt
   const imagePrompt = buildImagePrompt(options);
+  console.log('Image prompt:', imagePrompt.substring(0, 200) + '...');
 
   // Also build the base prompt for reference
   const basePrompt = generateArtSheetPrompt({
@@ -271,38 +364,57 @@ export async function generateArtSheets(options: GenerateOptions): Promise<Gener
   });
 
   // Generate description using AI
-  const description = await generateDescription(options);
+  let description = '';
+  try {
+    description = await generateDescription(options);
+    console.log('Generated description:', description.substring(0, 100));
+  } catch (e) {
+    console.error('Description generation failed:', e);
+    description = `${options.theme} 주제의 미술 도안입니다.`;
+  }
 
   // Generate images
   for (let i = 0; i < count; i++) {
     let imageUrl: string | null = null;
     let modelVersion = 'placeholder-v1';
 
-    // Try Imagen 3 first
-    console.log(`Generating image ${i + 1}/${count} with Imagen 3...`);
-    imageUrl = await generateWithImagen3(imagePrompt);
+    // Try Gemini 2.0 Flash first (more reliable for image generation)
+    console.log(`Generating image ${i + 1}/${count}...`);
 
-    if (imageUrl) {
-      modelVersion = 'imagen-3.0-generate-002';
-      console.log(`Successfully generated image with Imagen 3`);
-    } else {
-      // Fallback to Gemini 2.0
-      console.log('Imagen 3 failed, trying Gemini 2.0...');
-      imageUrl = await generateWithGemini2(imagePrompt);
-
+    try {
+      imageUrl = await generateWithGemini(imagePrompt);
       if (imageUrl) {
         modelVersion = 'gemini-2.0-flash-exp';
-        console.log(`Successfully generated image with Gemini 2.0`);
-      } else {
-        // Final fallback to placeholder
-        console.log('All image generation failed, using placeholder');
-        imageUrl = generatePlaceholderSVG(
-          options.technique,
-          options.theme,
-          options.subTheme || '',
-          i
-        );
+        console.log('Successfully generated with Gemini 2.0');
       }
+    } catch (e) {
+      console.error('Gemini generation error:', e);
+    }
+
+    // Try Imagen 3 as fallback
+    if (!imageUrl) {
+      console.log('Trying Imagen 3...');
+      try {
+        imageUrl = await generateWithImagen3(imagePrompt);
+        if (imageUrl) {
+          modelVersion = 'imagen-3.0-generate-002';
+          console.log('Successfully generated with Imagen 3');
+        }
+      } catch (e) {
+        console.error('Imagen 3 error:', e);
+      }
+    }
+
+    // Final fallback to placeholder
+    if (!imageUrl) {
+      console.log('Using placeholder SVG');
+      imageUrl = generatePlaceholderSVG(
+        options.technique,
+        options.theme,
+        options.subTheme || '',
+        options.additionalDetails || '',
+        i
+      );
     }
 
     results.push({
@@ -322,6 +434,7 @@ export async function generateArtSheets(options: GenerateOptions): Promise<Gener
     });
   }
 
+  console.log(`Generated ${results.length} sheets`);
   return results;
 }
 
