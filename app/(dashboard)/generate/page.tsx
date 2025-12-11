@@ -84,7 +84,7 @@ export default function GeneratePage() {
   const [technique, setTechnique] = useState('COLORING');
   const [theme, setTheme] = useState('ANIMALS');
   const [subTheme, setSubTheme] = useState('');
-  const [ageGroup, setAgeGroup] = useState('LOWER_ELEMENTARY');
+  const [ageGroup, setAgeGroup] = useState('LOWER_ELEM');
   const [prompt, setPrompt] = useState('');
   const [complexity, setComplexity] = useState([50]);
   const [quantity, setQuantity] = useState([1]);

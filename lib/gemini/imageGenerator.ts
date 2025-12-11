@@ -85,6 +85,12 @@ async function generateWithGemini(prompt: string): Promise<string | null> {
   try {
     console.log('Attempting Gemini 2.0 Flash image generation...');
 
+    // 이미지 생성에 최적화된 프롬프트
+    const imagePrompt = `Generate an image: ${prompt}
+
+IMPORTANT: You MUST generate and return an actual image, not text or emoji.
+Create a high-quality, printable art worksheet image.`;
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
       {
@@ -94,10 +100,11 @@ async function generateWithGemini(prompt: string): Promise<string | null> {
         },
         body: JSON.stringify({
           contents: [{
-            parts: [{ text: prompt }]
+            parts: [{ text: imagePrompt }]
           }],
           generationConfig: {
-            responseModalities: ['TEXT', 'IMAGE'],
+            responseModalities: ['IMAGE'],
+            temperature: 1,
           },
         }),
       }
@@ -110,7 +117,7 @@ async function generateWithGemini(prompt: string): Promise<string | null> {
     }
 
     const data = await response.json();
-    console.log('Gemini response received');
+    console.log('Gemini response:', JSON.stringify(data).substring(0, 500));
 
     // Extract image from response
     const candidates = data.candidates || [];
@@ -119,7 +126,7 @@ async function generateWithGemini(prompt: string): Promise<string | null> {
       for (const part of parts) {
         if (part.inlineData) {
           const { mimeType, data: imageData } = part.inlineData;
-          console.log('Image found in response');
+          console.log('Image found in response, mimeType:', mimeType);
           return `data:${mimeType};base64,${imageData}`;
         }
       }
@@ -162,6 +169,7 @@ async function generateWithImagen3(prompt: string): Promise<string | null> {
     }
 
     const data = await response.json();
+    console.log('Imagen 3 response:', JSON.stringify(data).substring(0, 300));
 
     if (data.predictions && data.predictions.length > 0) {
       const imageBytes = data.predictions[0].bytesBase64Encoded;
@@ -179,6 +187,167 @@ async function generateWithImagen3(prompt: string): Promise<string | null> {
   }
 }
 
+// Generate image using Gemini 2.0 Flash with imagen model
+async function generateWithGeminiImagen(prompt: string): Promise<string | null> {
+  try {
+    console.log('Attempting Gemini Imagen generation...');
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: `Create an image: ${prompt}` }]
+          }],
+          generationConfig: {
+            responseModalities: ['IMAGE'],
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Gemini Imagen API error:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log('Gemini Imagen response:', JSON.stringify(data).substring(0, 500));
+
+    const candidates = data.candidates || [];
+    for (const candidate of candidates) {
+      const parts = candidate.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData) {
+          const { mimeType, data: imageData } = part.inlineData;
+          console.log('Image found, mimeType:', mimeType);
+          return `data:${mimeType};base64,${imageData}`;
+        }
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Gemini Imagen generation failed:', error);
+    return null;
+  }
+}
+
+// Generate coloring page SVG templates based on theme
+function generateColoringTemplate(theme: string, subTheme: string): string {
+  const templates: Record<string, string> = {
+    ANIMALS: `
+      <!-- Cat outline -->
+      <ellipse cx="400" cy="380" rx="120" ry="100" fill="none" stroke="#333" stroke-width="3"/>
+      <ellipse cx="400" cy="320" rx="80" ry="70" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Ears -->
+      <path d="M340 270 L320 200 L360 250 Z" fill="none" stroke="#333" stroke-width="3"/>
+      <path d="M460 270 L480 200 L440 250 Z" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Eyes -->
+      <ellipse cx="370" cy="310" rx="15" ry="20" fill="none" stroke="#333" stroke-width="2"/>
+      <ellipse cx="430" cy="310" rx="15" ry="20" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Nose -->
+      <path d="M400 340 L390 355 L410 355 Z" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Mouth -->
+      <path d="M400 355 Q400 370 385 375" fill="none" stroke="#333" stroke-width="2"/>
+      <path d="M400 355 Q400 370 415 375" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Whiskers -->
+      <line x1="340" y1="350" x2="280" y2="340" stroke="#333" stroke-width="2"/>
+      <line x1="340" y1="360" x2="280" y2="365" stroke="#333" stroke-width="2"/>
+      <line x1="460" y1="350" x2="520" y2="340" stroke="#333" stroke-width="2"/>
+      <line x1="460" y1="360" x2="520" y2="365" stroke="#333" stroke-width="2"/>
+      <!-- Tail -->
+      <path d="M520 400 Q580 350 560 280" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Paws -->
+      <ellipse cx="350" cy="480" rx="30" ry="20" fill="none" stroke="#333" stroke-width="2"/>
+      <ellipse cx="450" cy="480" rx="30" ry="20" fill="none" stroke="#333" stroke-width="2"/>
+    `,
+    NATURE: `
+      <!-- Flower -->
+      <circle cx="400" cy="350" r="30" fill="none" stroke="#333" stroke-width="3"/>
+      <ellipse cx="400" cy="290" rx="25" ry="40" fill="none" stroke="#333" stroke-width="2"/>
+      <ellipse cx="450" cy="320" rx="25" ry="40" fill="none" stroke="#333" stroke-width="2" transform="rotate(72 400 350)"/>
+      <ellipse cx="430" cy="390" rx="25" ry="40" fill="none" stroke="#333" stroke-width="2" transform="rotate(144 400 350)"/>
+      <ellipse cx="370" cy="390" rx="25" ry="40" fill="none" stroke="#333" stroke-width="2" transform="rotate(216 400 350)"/>
+      <ellipse cx="350" cy="320" rx="25" ry="40" fill="none" stroke="#333" stroke-width="2" transform="rotate(288 400 350)"/>
+      <!-- Stem -->
+      <path d="M400 400 Q410 450 400 520" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Leaves -->
+      <path d="M400 450 Q450 430 470 450 Q450 470 400 450" fill="none" stroke="#333" stroke-width="2"/>
+      <path d="M400 480 Q350 460 330 480 Q350 500 400 480" fill="none" stroke="#333" stroke-width="2"/>
+    `,
+    VEHICLES: `
+      <!-- Car body -->
+      <path d="M250 400 L280 400 L300 350 L500 350 L520 400 L550 400 L550 450 L250 450 Z" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Windows -->
+      <path d="M310 360 L330 400 L470 400 L490 360 Z" fill="none" stroke="#333" stroke-width="2"/>
+      <line x1="400" y1="360" x2="400" y2="400" stroke="#333" stroke-width="2"/>
+      <!-- Wheels -->
+      <circle cx="320" cy="450" r="40" fill="none" stroke="#333" stroke-width="3"/>
+      <circle cx="320" cy="450" r="20" fill="none" stroke="#333" stroke-width="2"/>
+      <circle cx="480" cy="450" r="40" fill="none" stroke="#333" stroke-width="3"/>
+      <circle cx="480" cy="450" r="20" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Headlights -->
+      <rect x="540" y="410" width="20" height="15" rx="3" fill="none" stroke="#333" stroke-width="2"/>
+      <rect x="240" y="410" width="20" height="15" rx="3" fill="none" stroke="#333" stroke-width="2"/>
+    `,
+    FOOD: `
+      <!-- Apple -->
+      <path d="M400 280 Q340 300 320 380 Q310 460 400 500 Q490 460 480 380 Q460 300 400 280" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Stem -->
+      <path d="M400 280 Q410 250 400 230" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Leaf -->
+      <path d="M400 250 Q440 230 450 250 Q440 270 400 260" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Highlight -->
+      <ellipse cx="360" cy="340" rx="20" ry="30" fill="none" stroke="#333" stroke-width="1" stroke-dasharray="5,5"/>
+    `,
+    SPACE: `
+      <!-- Rocket -->
+      <path d="M400 200 Q420 220 420 280 L420 400 L380 400 L380 280 Q380 220 400 200" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Nose -->
+      <path d="M380 280 L400 240 L420 280" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Fins -->
+      <path d="M380 380 L340 420 L360 420 L380 400" fill="none" stroke="#333" stroke-width="2"/>
+      <path d="M420 380 L460 420 L440 420 L420 400" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Window -->
+      <circle cx="400" cy="320" r="25" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Flames -->
+      <path d="M385 400 Q380 450 400 480 Q420 450 415 400" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Stars -->
+      <polygon points="300,300 305,315 320,315 308,325 313,340 300,330 287,340 292,325 280,315 295,315" fill="none" stroke="#333" stroke-width="1"/>
+      <polygon points="500,250 503,260 515,260 506,268 509,280 500,272 491,280 494,268 485,260 497,260" fill="none" stroke="#333" stroke-width="1"/>
+    `,
+    OCEAN: `
+      <!-- Fish body -->
+      <ellipse cx="400" cy="380" rx="120" ry="60" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Tail -->
+      <path d="M520 380 L580 330 L580 430 Z" fill="none" stroke="#333" stroke-width="3"/>
+      <!-- Eye -->
+      <circle cx="330" cy="370" r="15" fill="none" stroke="#333" stroke-width="2"/>
+      <circle cx="330" cy="370" r="5" fill="#333"/>
+      <!-- Mouth -->
+      <path d="M280 390 Q290 400 280 410" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Fins -->
+      <path d="M380 320 Q400 270 420 320" fill="none" stroke="#333" stroke-width="2"/>
+      <path d="M380 440 Q400 490 420 440" fill="none" stroke="#333" stroke-width="2"/>
+      <!-- Scales pattern -->
+      <path d="M350 360 Q370 350 390 360" fill="none" stroke="#333" stroke-width="1"/>
+      <path d="M370 380 Q390 370 410 380" fill="none" stroke="#333" stroke-width="1"/>
+      <path d="M390 400 Q410 390 430 400" fill="none" stroke="#333" stroke-width="1"/>
+      <!-- Bubbles -->
+      <circle cx="260" cy="340" r="10" fill="none" stroke="#333" stroke-width="1"/>
+      <circle cx="250" cy="310" r="6" fill="none" stroke="#333" stroke-width="1"/>
+    `,
+  };
+
+  return templates[theme] || templates.ANIMALS;
+}
+
 // Generate a detailed placeholder SVG
 function generatePlaceholderSVG(
   technique: string,
@@ -187,9 +356,6 @@ function generatePlaceholderSVG(
   additionalDetails: string,
   index: number
 ): string {
-  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-  const color = colors[index % colors.length];
-
   const techniqueLabel = {
     COLORING: '색칠하기',
     MANDALA: '만다라',
@@ -199,97 +365,57 @@ function generatePlaceholderSVG(
     LINE_DRAWING: '선 그리기',
   }[technique] || technique;
 
-  const themeEmoji = {
-    ANIMALS: '🐱',
-    NATURE: '🌸',
-    VEHICLES: '🚗',
-    FOOD: '🍎',
-    SPACE: '🚀',
-    OCEAN: '🐠',
-    FANTASY: '🦄',
-    SPORTS: '⚽',
-  }[theme] || '🎨';
+  const themeLabel = {
+    ANIMALS: '동물',
+    NATURE: '자연',
+    VEHICLES: '탈것',
+    FOOD: '음식',
+    SPACE: '우주',
+    OCEAN: '바다',
+    FANTASY: '판타지',
+    SPORTS: '스포츠',
+  }[theme] || theme;
 
-  // Create a more meaningful placeholder based on the request
-  const title = subTheme || theme;
-  const description = additionalDetails || `${theme} 주제의 ${techniqueLabel} 도안`;
+  // Get coloring template based on theme
+  const coloringTemplate = generateColoringTemplate(theme, subTheme);
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
-  <defs>
-    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" stroke-width="1"/>
-    </pattern>
-  </defs>
-
   <!-- Background -->
   <rect width="800" height="1000" fill="white"/>
-  <rect width="800" height="1000" fill="url(#grid)"/>
 
   <!-- Border -->
-  <rect x="30" y="30" width="740" height="940" fill="none" stroke="${color}" stroke-width="3" rx="20"/>
+  <rect x="30" y="30" width="740" height="940" fill="none" stroke="#333" stroke-width="2" rx="10"/>
 
   <!-- Title area -->
-  <rect x="50" y="50" width="700" height="100" fill="${color}" opacity="0.1" rx="15"/>
-  <text x="400" y="95" font-family="Arial, sans-serif" font-size="36" fill="${color}" text-anchor="middle" font-weight="bold">
-    ${title}
+  <text x="400" y="80" font-family="Arial, sans-serif" font-size="28" fill="#333" text-anchor="middle" font-weight="bold">
+    ${themeLabel} ${techniqueLabel}
   </text>
-  <text x="400" y="130" font-family="Arial, sans-serif" font-size="18" fill="#6b7280" text-anchor="middle">
-    ${techniqueLabel} 도안
-  </text>
+  <line x1="100" y1="100" x2="700" y2="100" stroke="#ddd" stroke-width="1"/>
 
-  <!-- Main drawing area -->
-  <rect x="50" y="170" width="700" height="600" fill="#fafafa" rx="15" stroke="#e5e7eb" stroke-width="2"/>
-
-  <!-- Central icon -->
-  <text x="400" y="450" font-family="Arial" font-size="120" text-anchor="middle">
-    ${themeEmoji}
-  </text>
-
-  <!-- Technique indicator -->
-  <text x="400" y="550" font-family="Arial, sans-serif" font-size="20" fill="#9ca3af" text-anchor="middle">
-    ${description}
-  </text>
-
-  <!-- Drawing guide lines based on technique -->
-  ${technique === 'COLORING' ? `
-    <circle cx="400" cy="420" r="150" fill="none" stroke="#d1d5db" stroke-width="2" stroke-dasharray="10,5"/>
-  ` : technique === 'MANDALA' ? `
-    <circle cx="400" cy="420" r="120" fill="none" stroke="#d1d5db" stroke-width="2"/>
-    <circle cx="400" cy="420" r="80" fill="none" stroke="#d1d5db" stroke-width="2"/>
-    <circle cx="400" cy="420" r="40" fill="none" stroke="#d1d5db" stroke-width="2"/>
-  ` : technique === 'DOT_CONNECT' ? `
-    <circle cx="300" cy="350" r="8" fill="${color}"/><text x="300" y="335" font-size="14" fill="${color}" text-anchor="middle">1</text>
-    <circle cx="400" cy="300" r="8" fill="${color}"/><text x="400" y="285" font-size="14" fill="${color}" text-anchor="middle">2</text>
-    <circle cx="500" cy="350" r="8" fill="${color}"/><text x="500" y="335" font-size="14" fill="${color}" text-anchor="middle">3</text>
-    <circle cx="450" cy="450" r="8" fill="${color}"/><text x="450" y="435" font-size="14" fill="${color}" text-anchor="middle">4</text>
-    <circle cx="350" cy="450" r="8" fill="${color}"/><text x="350" y="435" font-size="14" fill="${color}" text-anchor="middle">5</text>
-  ` : ''}
+  <!-- Main drawing area with actual coloring template -->
+  <g transform="translate(0, 50)">
+    ${coloringTemplate}
+  </g>
 
   <!-- Instructions area -->
-  <rect x="50" y="790" width="700" height="160" fill="#f8fafc" rx="15" stroke="#e5e7eb" stroke-width="1"/>
-
-  <text x="80" y="830" font-family="Arial, sans-serif" font-size="16" fill="#374151" font-weight="bold">
+  <rect x="50" y="850" width="700" height="120" fill="#fafafa" rx="10" stroke="#eee" stroke-width="1"/>
+  <text x="70" y="880" font-family="Arial, sans-serif" font-size="14" fill="#666" font-weight="bold">
     활동 안내
   </text>
-  <text x="80" y="860" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
-    • 기법: ${techniqueLabel}
+  <text x="70" y="905" font-family="Arial, sans-serif" font-size="12" fill="#888">
+    • 테두리 안을 예쁜 색으로 색칠해 보세요
   </text>
-  <text x="80" y="885" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
-    • 주제: ${theme}${subTheme ? ` - ${subTheme}` : ''}
+  <text x="70" y="925" font-family="Arial, sans-serif" font-size="12" fill="#888">
+    • 색연필, 크레파스, 사인펜 등을 사용할 수 있어요
   </text>
-  <text x="80" y="910" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
-    • 자유롭게 색칠하거나 그려보세요!
+  <text x="70" y="945" font-family="Arial, sans-serif" font-size="12" fill="#888">
+    • 배경도 자유롭게 꾸며보세요!
   </text>
 
   <!-- Footer -->
-  <text x="400" y="970" font-family="Arial, sans-serif" font-size="12" fill="#9ca3af" text-anchor="middle">
-    ArtSheet Pro • AI 기반 미술 도안 생성 서비스
-  </text>
-
-  <!-- Page number -->
-  <text x="750" y="970" font-family="Arial, sans-serif" font-size="12" fill="#9ca3af" text-anchor="end">
-    #${index + 1}
+  <text x="400" y="985" font-family="Arial, sans-serif" font-size="10" fill="#aaa" text-anchor="middle">
+    ArtSheet Pro
   </text>
 </svg>`.trim();
 
@@ -378,17 +504,31 @@ export async function generateArtSheets(options: GenerateOptions): Promise<Gener
     let imageUrl: string | null = null;
     let modelVersion = 'placeholder-v1';
 
-    // Try Gemini 2.0 Flash first (more reliable for image generation)
     console.log(`Generating image ${i + 1}/${count}...`);
 
+    // Try Gemini 2.0 Flash Imagen model first
     try {
-      imageUrl = await generateWithGemini(imagePrompt);
+      imageUrl = await generateWithGeminiImagen(imagePrompt);
       if (imageUrl) {
-        modelVersion = 'gemini-2.0-flash-exp';
-        console.log('Successfully generated with Gemini 2.0');
+        modelVersion = 'gemini-2.0-flash-exp-image-generation';
+        console.log('Successfully generated with Gemini Imagen');
       }
     } catch (e) {
-      console.error('Gemini generation error:', e);
+      console.error('Gemini Imagen error:', e);
+    }
+
+    // Try standard Gemini 2.0 Flash
+    if (!imageUrl) {
+      console.log('Trying Gemini 2.0 Flash...');
+      try {
+        imageUrl = await generateWithGemini(imagePrompt);
+        if (imageUrl) {
+          modelVersion = 'gemini-2.0-flash-exp';
+          console.log('Successfully generated with Gemini 2.0');
+        }
+      } catch (e) {
+        console.error('Gemini generation error:', e);
+      }
     }
 
     // Try Imagen 3 as fallback
@@ -407,7 +547,7 @@ export async function generateArtSheets(options: GenerateOptions): Promise<Gener
 
     // Final fallback to placeholder
     if (!imageUrl) {
-      console.log('Using placeholder SVG');
+      console.log('All image generation methods failed, using placeholder SVG');
       imageUrl = generatePlaceholderSVG(
         options.technique,
         options.theme,
